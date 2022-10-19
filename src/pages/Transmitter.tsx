@@ -11,6 +11,7 @@ import { Piano, KeyboardShortcuts, MidiNumbers } from "react-piano";
 
 function useRtc(id?: string) {
   const [send, setSend] = useState<{ fn: (data: any) => any }>();
+  const [ended, setEnded] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -22,11 +23,16 @@ function useRtc(id?: string) {
         con.on("open", () => {
           setSend({ fn: (data) => con.send(data) });
         });
+
+        con.on("close", () => {
+          setEnded(true)
+        })
       });
     }
   }, [id]);
 
   return {
+    ended,
     send: send?.fn,
     ready: Boolean(send?.fn),
   };
@@ -45,8 +51,12 @@ export default function Transmitter() {
   const { id } = useParams();
   const rtc = useRtc(id);
 
+  if (rtc.ended) {
+    return <h1>Disconnected from reciever</h1>
+  }
+
   if (!rtc.ready) {
-    return <span>loading...</span>;
+    return <h1>Loading...</h1>;
   }
 
   return (
