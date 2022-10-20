@@ -25,6 +25,7 @@ function useClient() {
 }
 
 function useRtc(onData: (data: any) => any) {
+  const [ended, setEnded] = useState(false);
   const [id, setId] = useState<string>();
   const onDataRef = useRef(onData);
   onDataRef.current = onData;
@@ -33,17 +34,20 @@ function useRtc(onData: (data: any) => any) {
     const peer = new Peer();
     peer.on("open", (_id) => {
       setId(_id);
-      console.log(_id);
+      setEnded(false);
     });
     peer.on("connection", (connection) => {
-      console.log("connection");
       connection.on("data", (data) => {
         onDataRef.current(data);
       });
     });
+    peer.on("close", () => {
+      setEnded(true);
+    });
   }, []);
 
   return {
+    ended,
     id,
   };
 }
@@ -57,11 +61,20 @@ function Reciever() {
   const transmitUrl = `${window.location.origin}/transmitter/${rtc.id}`;
 
   if (!client) {
-    return <h1>Looking for ableton</h1>
+    return <h1>Looking for ableton</h1>;
   }
 
   if (!rtc.id) {
-    return <h1>Loading...</h1>
+    return <h1>Loading...</h1>;
+  }
+
+  if (rtc.ended) {
+    return (
+      <>
+        <h1>Disconnected</h1>
+        <span>Reload page to retry connection</span>
+      </>
+    );
   }
 
   return (

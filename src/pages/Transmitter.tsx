@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "react-piano/dist/styles.css";
 
 import { Peer } from "peerjs";
@@ -9,9 +9,51 @@ import "react-piano/dist/styles.css";
 // @ts-ignore
 import { Piano, KeyboardShortcuts, MidiNumbers } from "react-piano";
 
+import { WebMidi, NoteMessageEvent } from "webmidi";
+
+function useMidi(onMidi: (obj: { note: number; velocity: number }) => any) {
+  const onMidiRef = useRef(onMidi);
+  onMidiRef.current = onMidi;
+
+  useEffect(() => {
+    const remoteListeners: (() => any)[] = [];
+
+    const listener = (e: NoteMessageEvent) => {
+      onMidiRef.current({
+        note: e.note.number,
+        velocity: e.type === "noteoff" ? 0 : 100,
+      });
+    };
+
+    const addListeners = () => {
+      for (const input of WebMidi.inputs) {
+        input.addListener("noteon", listener);
+        input.addListener("noteoff", listener);
+
+        remoteListeners.push(() => {
+          input.removeListener("noteon", listener);
+          input.removeListener("noteoff", listener);
+        });
+      }
+    }
+
+    WebMidi.addListener("portschanged", addListeners);
+    WebMidi.addListener("enabled", addListeners);
+    WebMidi.enable();
+
+    return () => {
+      WebMidi.removeListener("enabled", addListeners);
+      WebMidi.removeListener("portschanged", addListeners);
+      for (const l of remoteListeners) {
+        l();
+      }
+    };
+  }, []);
+}
+
 function useRtc(id?: string) {
   const [send, setSend] = useState<{ fn: (data: any) => any }>();
-  const [ended, setEnded] = useState(false)
+  const [ended, setEnded] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -25,8 +67,8 @@ function useRtc(id?: string) {
         });
 
         con.on("close", () => {
-          setEnded(true)
-        })
+          setEnded(true);
+        });
       });
     }
   }, [id]);
@@ -50,9 +92,12 @@ const keyboardShortcuts = KeyboardShortcuts.create({
 export default function Transmitter() {
   const { id } = useParams();
   const rtc = useRtc(id);
+  useMidi(({ note, velocity }) => {
+    rtc.send?.(JSON.stringify({ note, velocity }));
+  });
 
   if (rtc.ended) {
-    return <h1>Disconnected from reciever</h1>
+    return <h1>Disconnected from reciever</h1>;
   }
 
   if (!rtc.ready) {
